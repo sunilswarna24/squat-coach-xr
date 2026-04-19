@@ -51,20 +51,32 @@ Android `TextToSpeech` API.
 
 Make one scene called `Main` under `Assets/SquatCoach/Scenes/`.
 
-Required GameObjects:
+### GameObject hierarchy
 
 ```
 Main (Scene)
-├── OVRCameraRig                       # from Meta XR SDK
-├── App (empty)
-│   ├── WebSocketClient                # → LandmarkWebSocketClient
-│   ├── VoiceCoach                     # → VoiceCoach
-│   └── (AppController is on "App")   # → AppController
+├── OVRCameraRig                         # from Meta XR SDK
+├── App (empty)                          # → AppController
+│   ├── WebSocketClient                  # → LandmarkWebSocketClient
+│   └── VoiceCoach                       # → VoiceCoach
 ├── HUDCanvas (World-Space Canvas)
-│   └── HudPanel                      # → HudPanel (TMP refs inside)
+│   └── HudPanel (translucent window)    # → HudPanel, + Image (background)
+│       ├── LeftColumn
+│       │   ├── RepsValue (TMP_Text)
+│       │   ├── SetValue  (TMP_Text)
+│       │   ├── TotalValue (TMP_Text)
+│       │   ├── Connection (TMP_Text)
+│       │   ├── Status     (TMP_Text)
+│       │   ├── Cue        (TMP_Text)       # shows "Chest up" etc.
+│       │   └── MutedBadge (GameObject)
+│       └── RightColumn
+│           └── Mannequin (RectTransform)    # → MannequinRenderer
+│               └── MannequinGraphic         # → MannequinGraphic
 └── IPEntryCanvas (World-Space Canvas)
-    └── IpEntryPanel                  # → IpEntryPanel (TMP + Button)
+    └── IpEntryPanel                        # → IpEntryPanel
 ```
+
+### AppController wiring
 
 On the `App` GameObject, add an **AppController** component and drag:
 
@@ -73,17 +85,44 @@ On the `App` GameObject, add an **AppController** component and drag:
 - `HudPanel` → **hud**
 - `IpEntryPanel` → **ipEntryPanel**
 
-Leave `autoConnect` off on `LandmarkWebSocketClient`; the AppController
+Leave `autoConnect` off on `LandmarkWebSocketClient` — the AppController
 drives it (it needs to know whether the IP is configured first).
 
-### HUD wiring
+### HUD panel wiring
 
-Create TMP text children inside the HUD panel and wire them into the
-`HudPanel` component's Inspector slots:
+The HUD is a **plain translucent window**. It has a solid `Image` component
+as its background (any color is fine; the script forces the alpha). Drop the
+following TMP text children in and wire them up in the `HudPanel` Inspector:
 
-- `setAndRepsText`, `phaseText`, `metricsText`
-- `statusText`, `activeIssuesText`
-- `sensitivityBadge`, `depthBadge`, `sideBadge`, `connectionBadge`, `mutedBadge`
+| Field              | What it displays              |
+| ------------------ | ----------------------------- |
+| `backgroundImage`  | The root `Image` component    |
+| `backgroundAlpha`  | Window translucency (0..1)    |
+| `repsValueText`    | Reps in the current set       |
+| `setValueText`     | Current set number            |
+| `totalValueText`   | Total reps across the session |
+| `connectionText`   | "Connected" / "Reconnecting…" |
+| `statusText`       | "Step into frame" etc.        |
+| `cueText`          | "Chest up", "Hips back", …    |
+| `mutedBadge`       | A tiny icon shown when muted  |
+| `mannequin`        | The `MannequinRenderer` in the right column |
+
+### Mannequin wiring
+
+The right column contains a child `RectTransform` sized to taste (the live
+mannequin auto-fits whatever rect you give it). Put both scripts on it:
+
+- **MannequinRenderer** — orchestrates the drawing. Assign its `graphic`
+  field to the sibling MannequinGraphic. Tune colors and thickness in the
+  Inspector.
+- **MannequinGraphic** — the custom UI Graphic that does the actual mesh
+  generation. No extra setup required.
+
+The mannequin is exercise-agnostic: it draws a side-view stick figure from
+the live landmarks, colors the bones/joints red when the analyzer flags an
+issue, and adds a yellow arrow showing the correction direction (e.g. chest
+up for a forward lean, hips back for knees drifting past the toes, heels
+down when a heel lift is detected).
 
 ### IP entry wiring
 
@@ -135,7 +174,9 @@ Assets/SquatCoach/Scripts/
 │   ├── SessionRecord.cs            JSON shape
 │   └── SessionLogger.cs            Local persistence
 └── UI/
-    ├── HudPanel.cs                 HUD rendering
+    ├── HudPanel.cs                 HUD rendering (translucent, two columns)
+    ├── MannequinGraphic.cs         Custom UI graphic: bones, joints, arrows
+    ├── MannequinRenderer.cs        Maps landmarks + issues to the mannequin
     └── IpEntryPanel.cs             First-run IP entry
 ```
 

@@ -7,94 +7,139 @@ using SquatCoach.Analysis;
 namespace SquatCoach.UI
 {
     /// <summary>
-    /// Floating 2D HUD panel that mirrors what the Python prototype shows
-    /// on its OpenCV window. Attach to a world-space Canvas and wire up
-    /// the TMP/Image references in the Inspector.
+    /// Translucent, two-column HUD. Intentionally exercise-agnostic — no
+    /// exercise name, no exercise-specific jargon on screen.
     ///
-    /// The panel is deliberately data-driven: the AppController calls
-    /// `Render(...)` every frame with the latest snapshot.
+    ///   ┌─────────────────────────────────────────┐
+    ///   │  REPS   03      │                       │
+    ///   │  SET    1       │                       │
+    ///   │                 │   [side-view          │
+    ///   │  TOTAL  12      │    mannequin]         │
+    ///   │                 │                       │
+    ///   │  Connected      │                       │
+    ///   │                 │                       │
+    ///   │  "chest up"     │                       │
+    ///   └─────────────────────────────────────────┘
+    ///
+    /// The root GameObject should have an Image component; this script can
+    /// set its alpha from the Inspector so the panel is a "translucent
+    /// window" as a single exposed knob.
     /// </summary>
     public class HudPanel : MonoBehaviour
     {
-        [Header("Top bar")]
-        public TMP_Text setAndRepsText;
-        public TMP_Text phaseText;
+        [Header("Translucent background (optional)")]
+        [Tooltip("If set, its alpha will be forced to `backgroundAlpha` at Awake.")]
+        public Image backgroundImage;
+        [Range(0f, 1f)] public float backgroundAlpha = 0.35f;
 
-        [Header("Metrics line")]
-        public TMP_Text metricsText;
+        [Header("Left column — counts")]
+        public TMP_Text repsValueText;     // e.g. "03"
+        public TMP_Text setValueText;      // e.g. "1"
+        public TMP_Text totalValueText;    // e.g. "12"
 
-        [Header("Status + issues")]
-        public TMP_Text statusText;
-        public TMP_Text activeIssuesText;
+        [Header("Left column — status")]
+        public TMP_Text connectionText;    // "Connected" | "Reconnecting…"
+        public TMP_Text statusText;        // e.g. "Step into frame"
+        public TMP_Text cueText;           // the active correction caption
+        public GameObject mutedBadge;
 
-        [Header("Badges")]
-        public TMP_Text sensitivityBadge;
-        public TMP_Text depthBadge;
-        public TMP_Text sideBadge;
-        public TMP_Text connectionBadge;
-        public TMP_Text mutedBadge;
+        [Header("Right column — mannequin")]
+        public MannequinRenderer mannequin;
 
         [Header("Colors")]
-        public Color okColor = new Color(0.20f, 0.80f, 0.20f);
-        public Color warnColor = new Color(1.00f, 0.65f, 0.00f);
-        public Color badColor = new Color(0.90f, 0.15f, 0.15f);
-        public Color dimColor = new Color(0.75f, 0.75f, 0.75f);
+        public Color valueColor = new Color(1f, 1f, 1f, 0.95f);
+        public Color labelColor = new Color(0.80f, 0.82f, 0.86f, 0.80f);
+        public Color okColor = new Color(0.60f, 0.85f, 0.55f);
+        public Color warnColor = new Color(1.00f, 0.80f, 0.20f);
+        public Color badColor = new Color(0.95f, 0.30f, 0.25f);
 
+        private void Awake()
+        {
+            ApplyTranslucency();
+        }
+
+        private void OnValidate()
+        {
+            // Live-preview the alpha tweak in the Editor.
+            if (Application.isPlaying) return;
+            ApplyTranslucency();
+        }
+
+        private void ApplyTranslucency()
+        {
+            if (backgroundImage == null) return;
+            var c = backgroundImage.color;
+            c.a = backgroundAlpha;
+            backgroundImage.color = c;
+        }
+
+        /// <summary>
+        /// Called every frame by AppController with the latest snapshot.
+        /// Kept explicit (no Update polling) so it's obvious where state flows.
+        /// </summary>
         public void Render(
             int setIdx, int repsInSet, int totalReps,
             SquatAnalyzer.Phase phase,
             FrameMetrics metrics,
             List<string> activeIssues,
             string status,
-            string sensitivity, string depthTarget, string side,
-            string connectionLabel, bool muted)
+            string connectionLabel,
+            bool connected,
+            bool muted,
+            PoseFrame? poseSnapshot,
+            string facing)
         {
-            if (setAndRepsText != null)
-                setAndRepsText.text = $"Set {setIdx}   Reps {repsInSet}   (total {totalReps})";
-            if (phaseText != null)
-                phaseText.text = phase.ToString();
+            if (repsValueText != null) repsValueText.text = repsInSet.ToString("D2");
+            if (setValueText != null) setValueText.text = setIdx.ToString();
+            if (totalValueText != null) totalValueText.text = totalReps.ToString();
 
-            if (metricsText != null)
+            if (connectionText != null)
             {
-                if (metrics.VisibilityOk)
-                {
-                    metricsText.color = dimColor;
-                    metricsText.text =
-                        $"Knee {metrics.KneeAngleDeg,5:F1}°   " +
-                        $"Lean {metrics.TorsoLeanDeg,5:F1}°   " +
-                        $"Depth {metrics.DepthRatio:+0.00;-0.00}   " +
-                        $"KoT {metrics.KneePastToeRatio:+0.00;-0.00}";
-                }
-                else
-                {
-                    metricsText.text = "";
-                }
+                connectionText.text = connectionLabel ?? "";
+                connectionText.color = connected ? okColor : warnColor;
             }
 
             if (statusText != null)
             {
                 statusText.text = status ?? "";
-                statusText.color = string.IsNullOrEmpty(status) ? dimColor : warnColor;
+                statusText.color = string.IsNullOrEmpty(status) ? labelColor : warnColor;
             }
 
-            if (activeIssuesText != null)
+            if (cueText != null)
             {
                 if (activeIssues != null && activeIssues.Count > 0)
                 {
-                    activeIssuesText.color = badColor;
-                    activeIssuesText.text = string.Join("   •   ", activeIssues);
+                    cueText.color = badColor;
+                    cueText.text = HumanizeCue(activeIssues[0]);
                 }
                 else
                 {
-                    activeIssuesText.text = "";
+                    cueText.text = "";
                 }
             }
 
-            if (sensitivityBadge != null) sensitivityBadge.text = $"Sens: {sensitivity}";
-            if (depthBadge != null) depthBadge.text = $"Depth: {depthTarget}";
-            if (sideBadge != null) sideBadge.text = $"Side: {side}";
-            if (connectionBadge != null) connectionBadge.text = connectionLabel;
-            if (mutedBadge != null) mutedBadge.gameObject.SetActive(muted);
+            if (mutedBadge != null) mutedBadge.SetActive(muted);
+
+            if (mannequin != null)
+            {
+                if (poseSnapshot.HasValue && poseSnapshot.Value.IsValid)
+                    mannequin.SetPose(poseSnapshot.Value, activeIssues, facing);
+                else
+                    mannequin.ClearPose();
+            }
         }
+
+        // Map internal issue keys to short human strings. Kept separate from
+        // the spoken copy so the caption can be terser than the voice line.
+        private static string HumanizeCue(string key) => key switch
+        {
+            "lean_forward"  => "Chest up",
+            "knees_forward" => "Hips back",
+            "heel_lift"     => "Heels down",
+            "depth_shallow" => "Go deeper",
+            "rushed"        => "Slow down",
+            "partial_rep"   => "Full range",
+            _               => key,
+        };
     }
 }

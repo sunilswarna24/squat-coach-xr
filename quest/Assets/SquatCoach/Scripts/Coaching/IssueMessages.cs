@@ -63,12 +63,12 @@ namespace SquatCoach.Coaching
             {
                 ["welcome"] = new[]
                 {
-                    "Welcome to the squat coach.",
+                    "Welcome to your form coach.",
                     "Place the camera to your side, at about hip height.",
                     "Stand roughly six feet from the camera so your whole body fits in the frame.",
                     "I'll count your reps and speak corrections in real time.",
                 },
-                ["how_to_squat"] = new[]
+                ["how_to"] = new[]
                 {
                     "Stand with your feet shoulder-width apart, toes slightly turned out.",
                     "Brace your core, and keep your chest up.",

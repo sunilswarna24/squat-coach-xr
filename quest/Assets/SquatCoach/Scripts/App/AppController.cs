@@ -14,9 +14,9 @@ namespace SquatCoach.App
     ///
     /// Scene setup (one-time, in the Unity editor):
     ///   1. Add an empty GameObject named "App" and put this component on it.
-    ///   2. Drop the LandmarkWebSocketClient, VoiceCoach, HudPanel, and
-    ///      IpEntryPanel scripts onto child objects and assign the refs
-    ///      below in the Inspector.
+    ///   2. Drop the LandmarkWebSocketClient, VoiceCoach, HudPanel
+    ///      (with its MannequinRenderer child), and IpEntryPanel scripts
+    ///      onto child objects and assign the refs below in the Inspector.
     /// </summary>
     public class AppController : MonoBehaviour
     {
@@ -39,12 +39,17 @@ namespace SquatCoach.App
         private int _totalReps;
         private string _connectionLabel = "Disconnected";
         private bool _hasSpokenWelcome;
-        private int _lastImageW, _lastImageH;
 
-        // Latest values for Render().
+        // Latest values for Render(). The pose buffers are owned by us here
+        // (not the WebSocket client) so the HUD can safely hold a reference.
         private FrameMetrics _lastMetrics = FrameMetrics.Empty;
         private List<string> _lastActiveIssues = new List<string>();
-        private string _lastStatus = "Connecting to the Pi...";
+        private string _lastStatus = "Connecting...";
+        private bool _hasPose;
+        private readonly Vector3[] _poseShadowPoints = new Vector3[LM.Count];
+        private readonly float[] _poseShadowVis = new float[LM.Count];
+        private PoseFrame _poseShadow;
+        private string _resolvedFacing = "auto";
 
         private void Awake()
         {
@@ -59,6 +64,12 @@ namespace SquatCoach.App
 
             if (voiceCoach != null)
                 voiceCoach.defaultCooldownS = SensitivityPreset.All[sensitivity].VoiceCooldownS;
+
+            _poseShadow = new PoseFrame
+            {
+                Points = _poseShadowPoints,
+                Vis = _poseShadowVis,
+            };
         }
 
         private void OnEnable()
@@ -98,7 +109,7 @@ namespace SquatCoach.App
             if (!ConnectionConfig.IsConfigured && ipEntryPanel != null)
             {
                 ipEntryPanel.gameObject.SetActive(true);
-                _lastStatus = "Enter your Pi's IP to begin.";
+                _lastStatus = "Enter your server IP to begin.";
             }
             else
             {
@@ -109,7 +120,6 @@ namespace SquatCoach.App
 
         private void OnApplicationQuit()
         {
-            // Close any open set, then persist the session.
             var closed = _analyzer.ForceCloseSet();
             if (closed != null) _logger.AddSet(closed);
             _logger.Save();
@@ -128,7 +138,7 @@ namespace SquatCoach.App
             switch (s)
             {
                 case LandmarkWebSocketClient.State.Connecting:
-                    _connectionLabel = "Connecting...";
+                    _connectionLabel = "Connecting…";
                     break;
                 case LandmarkWebSocketClient.State.Connected:
                     _connectionLabel = "Connected";
@@ -140,16 +150,15 @@ namespace SquatCoach.App
                     }
                     break;
                 default:
-                    _connectionLabel = "Disconnected";
-                    _lastStatus = "Reconnecting to the Pi...";
+                    _connectionLabel = "Reconnecting…";
+                    _lastStatus = "Waiting for the signal…";
+                    _hasPose = false;
                     break;
             }
         }
 
         private void HandleHello(WireMessages.HelloInfo info)
         {
-            _lastImageW = info.ImageW;
-            _lastImageH = info.ImageH;
             Debug.Log($"[WS] hello: model={info.Model} delegate={info.Delegate} " +
                       $"res={info.ImageW}x{info.ImageH} fps={info.TargetFps}");
         }
@@ -162,6 +171,19 @@ namespace SquatCoach.App
             _lastMetrics = result.Metrics;
             _lastActiveIssues = result.ActiveIssues ?? new List<string>();
             _lastStatus = result.StatusMessage ?? "";
+            _resolvedFacing = string.IsNullOrEmpty(_lastMetrics.Facing) ? facing : _lastMetrics.Facing;
+
+            // Copy the pose into our shadow buffers. The incoming `frame`
+            // references buffers owned by the WebSocket client, which will
+            // overwrite them on the next message.
+            System.Array.Copy(frame.Points, _poseShadowPoints, LM.Count);
+            if (frame.Vis != null)
+                System.Array.Copy(frame.Vis, _poseShadowVis, LM.Count);
+            _poseShadow.Seq = frame.Seq;
+            _poseShadow.TsMs = frame.TsMs;
+            _poseShadow.ImageW = frame.ImageW;
+            _poseShadow.ImageH = frame.ImageH;
+            _hasPose = true;
 
             foreach (var key in _lastActiveIssues) voiceCoach?.SpeakIssue(key);
 
@@ -181,11 +203,11 @@ namespace SquatCoach.App
         private void HandleNoPose()
         {
             float now = Time.realtimeSinceStartup;
-            // Feed a null frame to drive idle-timeout / "step into frame" logic.
             var result = _analyzer.Update(null, now);
             _lastMetrics = result.Metrics;
             _lastActiveIssues = result.ActiveIssues ?? new List<string>();
             _lastStatus = result.StatusMessage ?? "";
+            _hasPose = false;
             if (result.CompletedSet != null) _logger.AddSet(result.CompletedSet);
         }
 
@@ -202,11 +224,12 @@ namespace SquatCoach.App
                 metrics: _lastMetrics,
                 activeIssues: _lastActiveIssues,
                 status: _lastStatus,
-                sensitivity: sensitivity,
-                depthTarget: depthTarget.ToString(),
-                side: string.IsNullOrEmpty(_lastMetrics.Facing) ? facing : _lastMetrics.Facing,
                 connectionLabel: _connectionLabel,
-                muted: voiceCoach != null && voiceCoach.Muted);
+                connected: wsClient != null &&
+                           wsClient.CurrentState == LandmarkWebSocketClient.State.Connected,
+                muted: voiceCoach != null && voiceCoach.Muted,
+                poseSnapshot: _hasPose ? (PoseFrame?)_poseShadow : null,
+                facing: _resolvedFacing);
         }
 
         // --- helpers -------------------------------------------------------
