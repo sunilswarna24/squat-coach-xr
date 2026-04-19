@@ -14,6 +14,7 @@ import urllib.request
 from pathlib import Path
 from typing import Optional
 
+import cv2
 import numpy as np
 
 from .config import MODELS_DIR
@@ -101,7 +102,10 @@ class PoseDetector:
         import mediapipe as mp  # safe: _lazy_init imported it above
 
         h, w = bgr_frame.shape[:2]
-        rgb = bgr_frame[..., ::-1]  # BGR -> RGB, no copy where possible
+        # `cv2.cvtColor` returns a contiguous C-ordered uint8 array, which is
+        # what `mp.Image` requires. The `[..., ::-1]` shortcut yields a
+        # negatively-strided view that the MediaPipe binding rejects.
+        rgb = cv2.cvtColor(bgr_frame, cv2.COLOR_BGR2RGB)
         mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
 
         # `detect_for_video` requires monotonically increasing microsecond
