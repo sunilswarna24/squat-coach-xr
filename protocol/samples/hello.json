@@ -1,0 +1,10 @@
+{
+  "v": 1,
+  "type": "hello",
+  "model": "mediapipe_pose_landmarker_lite",
+  "delegate": "cpu",
+  "image_w": 640,
+  "image_h": 480,
+  "target_fps": 30,
+  "server_ts_ms": 1700000000000
+}

@@ -1,0 +1,22 @@
+# Unity-generated directories (regenerated on project open)
+Library/
+Temp/
+Obj/
+Build/
+Builds/
+Logs/
+UserSettings/
+MemoryCaptures/
+
+# IDE / build artifacts
+*.csproj
+*.sln
+*.pidb
+*.booproj
+*.apk
+*.aab
+*.unitypackage
+
+# OS
+.DS_Store
+Thumbs.db

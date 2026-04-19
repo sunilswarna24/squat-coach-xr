@@ -1,0 +1,90 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "SquatCoachXR wire messages",
+  "oneOf": [
+    { "$ref": "#/definitions/hello" },
+    { "$ref": "#/definitions/pose" },
+    { "$ref": "#/definitions/nopose" },
+    { "$ref": "#/definitions/control" },
+    { "$ref": "#/definitions/bye" }
+  ],
+  "definitions": {
+    "hello": {
+      "type": "object",
+      "required": ["v", "type", "model", "delegate", "image_w", "image_h", "target_fps", "server_ts_ms"],
+      "properties": {
+        "v": { "type": "integer", "const": 1 },
+        "type": { "type": "string", "const": "hello" },
+        "model": { "type": "string" },
+        "delegate": { "type": "string", "enum": ["cpu", "gpu", "qnn"] },
+        "image_w": { "type": "integer", "minimum": 1 },
+        "image_h": { "type": "integer", "minimum": 1 },
+        "target_fps": { "type": "integer", "minimum": 1, "maximum": 120 },
+        "server_ts_ms": { "type": "integer" }
+      },
+      "additionalProperties": false
+    },
+    "pose": {
+      "type": "object",
+      "required": ["v", "type", "seq", "ts_ms", "w", "h", "landmarks"],
+      "properties": {
+        "v": { "type": "integer", "const": 1 },
+        "type": { "type": "string", "const": "pose" },
+        "seq": { "type": "integer", "minimum": 0 },
+        "ts_ms": { "type": "integer" },
+        "w": { "type": "integer", "minimum": 1 },
+        "h": { "type": "integer", "minimum": 1 },
+        "landmarks": {
+          "type": "array",
+          "minItems": 33,
+          "maxItems": 33,
+          "items": {
+            "type": "object",
+            "required": ["x", "y", "z", "v"],
+            "properties": {
+              "x": { "type": "number" },
+              "y": { "type": "number" },
+              "z": { "type": "number" },
+              "v": { "type": "number", "minimum": 0, "maximum": 1 }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "nopose": {
+      "type": "object",
+      "required": ["v", "type", "seq", "ts_ms"],
+      "properties": {
+        "v": { "type": "integer", "const": 1 },
+        "type": { "type": "string", "const": "nopose" },
+        "seq": { "type": "integer", "minimum": 0 },
+        "ts_ms": { "type": "integer" }
+      },
+      "additionalProperties": false
+    },
+    "control": {
+      "type": "object",
+      "required": ["v", "type", "action"],
+      "properties": {
+        "v": { "type": "integer", "const": 1 },
+        "type": { "type": "string", "const": "control" },
+        "action": { "type": "string", "enum": ["pause", "resume", "set_fps", "mirror"] },
+        "fps": { "type": "integer", "minimum": 1, "maximum": 120 },
+        "mirror": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "bye": {
+      "type": "object",
+      "required": ["v", "type"],
+      "properties": {
+        "v": { "type": "integer", "const": 1 },
+        "type": { "type": "string", "const": "bye" },
+        "reason": { "type": "string" }
+      },
+      "additionalProperties": false
+    }
+  }
+}

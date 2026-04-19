@@ -1,0 +1,233 @@
+using System.Collections.Generic;
+using UnityEngine;
+using SquatCoach.Analysis;
+using SquatCoach.Coaching;
+using SquatCoach.Networking;
+using SquatCoach.Session;
+using SquatCoach.UI;
+
+namespace SquatCoach.App
+{
+    /// <summary>
+    /// Top-level glue that wires the WebSocket client, the SquatAnalyzer,
+    /// the voice coach, the HUD, and the session logger together.
+    ///
+    /// Scene setup (one-time, in the Unity editor):
+    ///   1. Add an empty GameObject named "App" and put this component on it.
+    ///   2. Drop the LandmarkWebSocketClient, VoiceCoach, HudPanel, and
+    ///      IpEntryPanel scripts onto child objects and assign the refs
+    ///      below in the Inspector.
+    /// </summary>
+    public class AppController : MonoBehaviour
+    {
+        [Header("Wiring")]
+        public LandmarkWebSocketClient wsClient;
+        public VoiceCoach voiceCoach;
+        public HudPanel hud;
+        public IpEntryPanel ipEntryPanel;
+
+        [Header("Analyzer defaults")]
+        public string sensitivity = "medium";
+        public DepthTarget depthTarget = DepthTarget.Parallel;
+        public string facing = "auto";
+
+        [Header("Startup behaviour")]
+        public bool speakWelcomeOnConnect = true;
+
+        private readonly SquatAnalyzer _analyzer = new SquatAnalyzer();
+        private SessionLogger _logger;
+        private int _totalReps;
+        private string _connectionLabel = "Disconnected";
+        private bool _hasSpokenWelcome;
+        private int _lastImageW, _lastImageH;
+
+        // Latest values for Render().
+        private FrameMetrics _lastMetrics = FrameMetrics.Empty;
+        private List<string> _lastActiveIssues = new List<string>();
+        private string _lastStatus = "Connecting to the Pi...";
+
+        private void Awake()
+        {
+            _analyzer.Sensitivity = sensitivity;
+            _analyzer.Depth = depthTarget;
+            _analyzer.Facing = facing;
+
+            _logger = new SessionLogger(
+                sensitivity: sensitivity,
+                depthTarget: depthTarget.ToString().ToLowerInvariant(),
+                facing: facing);
+
+            if (voiceCoach != null)
+                voiceCoach.defaultCooldownS = SensitivityPreset.All[sensitivity].VoiceCooldownS;
+        }
+
+        private void OnEnable()
+        {
+            if (wsClient != null)
+            {
+                wsClient.OnStateChanged += HandleWsState;
+                wsClient.OnHello += HandleHello;
+                wsClient.OnPose += HandlePose;
+                wsClient.OnNoPose += HandleNoPose;
+                wsClient.OnError += (msg) =>
+                {
+                    Debug.LogWarning("[WS] " + msg);
+                    _lastStatus = "Connection error.";
+                };
+            }
+            if (ipEntryPanel != null)
+                ipEntryPanel.OnConnectRequested += HandleConnectRequested;
+        }
+
+        private void OnDisable()
+        {
+            if (wsClient != null)
+            {
+                wsClient.OnStateChanged -= HandleWsState;
+                wsClient.OnHello -= HandleHello;
+                wsClient.OnPose -= HandlePose;
+                wsClient.OnNoPose -= HandleNoPose;
+            }
+            if (ipEntryPanel != null)
+                ipEntryPanel.OnConnectRequested -= HandleConnectRequested;
+        }
+
+        private void Start()
+        {
+            // Either show the IP entry panel on first run, or connect directly.
+            if (!ConnectionConfig.IsConfigured && ipEntryPanel != null)
+            {
+                ipEntryPanel.gameObject.SetActive(true);
+                _lastStatus = "Enter your Pi's IP to begin.";
+            }
+            else
+            {
+                if (ipEntryPanel != null) ipEntryPanel.gameObject.SetActive(false);
+                if (wsClient != null) wsClient.Connect();
+            }
+        }
+
+        private void OnApplicationQuit()
+        {
+            // Close any open set, then persist the session.
+            var closed = _analyzer.ForceCloseSet();
+            if (closed != null) _logger.AddSet(closed);
+            _logger.Save();
+        }
+
+        // --- event handlers ------------------------------------------------
+
+        private void HandleConnectRequested()
+        {
+            if (ipEntryPanel != null) ipEntryPanel.gameObject.SetActive(false);
+            wsClient?.Connect();
+        }
+
+        private void HandleWsState(LandmarkWebSocketClient.State s)
+        {
+            switch (s)
+            {
+                case LandmarkWebSocketClient.State.Connecting:
+                    _connectionLabel = "Connecting...";
+                    break;
+                case LandmarkWebSocketClient.State.Connected:
+                    _connectionLabel = "Connected";
+                    _lastStatus = "";
+                    if (speakWelcomeOnConnect && !_hasSpokenWelcome)
+                    {
+                        _hasSpokenWelcome = true;
+                        voiceCoach?.SpeakSequence("welcome");
+                    }
+                    break;
+                default:
+                    _connectionLabel = "Disconnected";
+                    _lastStatus = "Reconnecting to the Pi...";
+                    break;
+            }
+        }
+
+        private void HandleHello(WireMessages.HelloInfo info)
+        {
+            _lastImageW = info.ImageW;
+            _lastImageH = info.ImageH;
+            Debug.Log($"[WS] hello: model={info.Model} delegate={info.Delegate} " +
+                      $"res={info.ImageW}x{info.ImageH} fps={info.TargetFps}");
+        }
+
+        private void HandlePose(PoseFrame frame)
+        {
+            float now = Time.realtimeSinceStartup;
+            var result = _analyzer.Update(frame, now);
+
+            _lastMetrics = result.Metrics;
+            _lastActiveIssues = result.ActiveIssues ?? new List<string>();
+            _lastStatus = result.StatusMessage ?? "";
+
+            foreach (var key in _lastActiveIssues) voiceCoach?.SpeakIssue(key);
+
+            if (result.CompletedRep != null)
+            {
+                _totalReps += 1;
+                string cue = PickCueForRep(result.CompletedRep);
+                if (cue != null) voiceCoach?.SpeakIssue(cue);
+            }
+            if (result.CompletedSet != null)
+            {
+                _logger.AddSet(result.CompletedSet);
+                if (IsGoodSet(result.CompletedSet)) voiceCoach?.SpeakIssue("good_set");
+            }
+        }
+
+        private void HandleNoPose()
+        {
+            float now = Time.realtimeSinceStartup;
+            // Feed a null frame to drive idle-timeout / "step into frame" logic.
+            var result = _analyzer.Update(null, now);
+            _lastMetrics = result.Metrics;
+            _lastActiveIssues = result.ActiveIssues ?? new List<string>();
+            _lastStatus = result.StatusMessage ?? "";
+            if (result.CompletedSet != null) _logger.AddSet(result.CompletedSet);
+        }
+
+        // --- rendering -----------------------------------------------------
+
+        private void LateUpdate()
+        {
+            if (hud == null) return;
+            hud.Render(
+                setIdx: _analyzer.SetIndex,
+                repsInSet: _analyzer.RepsInSet,
+                totalReps: _totalReps,
+                phase: _analyzer.CurrentPhase,
+                metrics: _lastMetrics,
+                activeIssues: _lastActiveIssues,
+                status: _lastStatus,
+                sensitivity: sensitivity,
+                depthTarget: depthTarget.ToString(),
+                side: string.IsNullOrEmpty(_lastMetrics.Facing) ? facing : _lastMetrics.Facing,
+                connectionLabel: _connectionLabel,
+                muted: voiceCoach != null && voiceCoach.Muted);
+        }
+
+        // --- helpers -------------------------------------------------------
+
+        private static readonly string[] _cuePriority =
+        {
+            "lean_forward", "heel_lift", "knees_forward", "depth_shallow", "rushed",
+        };
+
+        private static string PickCueForRep(RepRecord rep)
+        {
+            if (rep.Issues == null || rep.Issues.Count == 0) return null;
+            foreach (var key in _cuePriority)
+                if (rep.Issues.Contains(key)) return key;
+            return rep.Issues[0];
+        }
+
+        private static bool IsGoodSet(SetRecord s)
+        {
+            if (s.RepCount == 0) return false;
+            return (float)s.GoodCount / s.RepCount >= 0.8f;
+        }
+    }
+}

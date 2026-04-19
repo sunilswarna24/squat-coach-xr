@@ -1,0 +1,34 @@
+# ---- Python / Pi side ----
+pi/.venv/
+pi/venv/
+pi/**/__pycache__/
+pi/**/*.pyc
+pi/.env
+pi/models/
+pi/*.log
+
+# ---- Unity / Quest side ----
+quest/Library/
+quest/Temp/
+quest/Obj/
+quest/Build/
+quest/Builds/
+quest/Logs/
+quest/UserSettings/
+quest/MemoryCaptures/
+quest/*.csproj
+quest/*.sln
+quest/*.pidb
+quest/*.booproj
+quest/*.apk
+quest/*.aab
+quest/Assets/**/*.meta.bak
+
+# ---- OS / editors ----
+.DS_Store
+Thumbs.db
+.vs/
+.vscode/
+.idea/
+*.swp
+*.bak
