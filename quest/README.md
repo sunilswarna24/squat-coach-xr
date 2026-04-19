@@ -5,11 +5,15 @@ runs the squat analyzer in C# (ported from the Python prototype), renders a
 floating 2D HUD, and speaks corrections through the Quest's speakers via the
 Android `TextToSpeech` API.
 
+> **Shipping an APK today?** Use the express guide:
+> [`HANDOFF.md`](./HANDOFF.md) (covers install → build → sideload in eight
+> numbered steps, with a one-click scene generator).
+> Use this `README.md` if you want the longer-form reference.
+
 > The scripts under `Assets/SquatCoach/Scripts/` are complete and self-
-> consistent, but Unity projects cannot be fully represented in git without
-> the generated `Library/`, `Packages/`, and `ProjectSettings/` folders. See
-> "First-time Unity setup" below for how to turn this folder into a running
-> Unity project.
+> consistent. A minimal `Packages/manifest.json` and pinned
+> `ProjectSettings/ProjectVersion.txt` are committed so Unity can open the
+> folder as a project directly — see `HANDOFF.md` for the fastest path.
 
 ## Requirements
 
