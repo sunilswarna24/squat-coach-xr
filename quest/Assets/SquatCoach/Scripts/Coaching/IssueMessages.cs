@@ -9,6 +9,33 @@ namespace SquatCoach.Coaching
     /// </summary>
     public static class IssueMessages
     {
+        /// <summary>
+        /// Single source of truth for which issue "wins" when more than one
+        /// is active. Both the voice coach (AppController) and the HUD caption
+        /// (HudPanel) consult this list so that the text on screen can never
+        /// disagree with the clip being spoken.
+        /// </summary>
+        public static readonly string[] CuePriority =
+        {
+            "lean_forward", "heel_lift", "knees_forward",
+            "depth_shallow", "rushed", "partial_rep",
+        };
+
+        /// <summary>
+        /// Return the highest-priority key in <paramref name="issues"/>, or
+        /// null if the list is empty. Unknown keys fall through to the first
+        /// entry so analyzer additions don't silently disappear.
+        /// </summary>
+        public static string PickTopPriority(IList<string> issues)
+        {
+            if (issues == null || issues.Count == 0) return null;
+            for (int i = 0; i < CuePriority.Length; i++)
+            {
+                if (issues.Contains(CuePriority[i])) return CuePriority[i];
+            }
+            return issues[0];
+        }
+
         public static readonly IReadOnlyDictionary<string, string[]> All =
             new Dictionary<string, string[]>
             {

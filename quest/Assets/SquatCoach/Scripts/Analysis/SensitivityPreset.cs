@@ -35,9 +35,12 @@ namespace SquatCoach.Analysis
         public static readonly IReadOnlyDictionary<string, SensitivityPreset> All =
             new Dictionary<string, SensitivityPreset>
             {
-                ["low"]    = new SensitivityPreset(165f, 145f, 80f, 0.60f, 0.40f, 1.0f, 12, 6.0f),
-                ["medium"] = new SensitivityPreset(160f, 140f, 65f, 0.45f, 0.30f, 1.2f, 8,  4.0f),
-                ["high"]   = new SensitivityPreset(155f, 135f, 55f, 0.30f, 0.20f, 1.5f, 5,  2.5f),
+                // KneePastToeRatio is sensitive to camera-axis error and
+                // user-to-camera distance; values are looser than the Python
+                // original after field-testing on the Quest side stream.
+                ["low"]    = new SensitivityPreset(165f, 145f, 80f, 0.80f, 0.40f, 1.0f, 12, 6.0f),
+                ["medium"] = new SensitivityPreset(160f, 140f, 65f, 0.60f, 0.30f, 1.2f, 8,  4.0f),
+                ["high"]   = new SensitivityPreset(155f, 135f, 55f, 0.40f, 0.20f, 1.5f, 5,  2.5f),
             };
     }
 

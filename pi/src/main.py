@@ -49,11 +49,14 @@ class CaptureWorker(threading.Thread):
         super().__init__(name="capture", daemon=True)
         self._cfg = cfg
         self._bc = broadcaster
-        self._stop = threading.Event()
+        # Do NOT name this `_stop` — threading.Thread has a private `_stop`
+        # method and shadowing it with an Event breaks join()/is_alive()
+        # during shutdown.
+        self._stop_event = threading.Event()
         self._fps_ema: float = 0.0
 
     def stop(self) -> None:
-        self._stop.set()
+        self._stop_event.set()
 
     def run(self) -> None:
         cfg = self._cfg
@@ -75,7 +78,7 @@ class CaptureWorker(threading.Thread):
         t_last_log = time.monotonic()
 
         try:
-            while not self._stop.is_set():
+            while not self._stop_event.is_set():
                 # Frame pacing — aim for target_fps, but never block longer
                 # than one period so we stay responsive to shutdown.
                 now = time.monotonic()
@@ -111,7 +114,7 @@ class CaptureWorker(threading.Thread):
                 if cfg.preview:
                     cv2.imshow("pi-preview", frame)
                     if (cv2.waitKey(1) & 0xFF) == ord("q"):
-                        self._stop.set()
+                        self._stop_event.set()
                         break
 
                 if seq % cfg.log_every_n_frames == 0:

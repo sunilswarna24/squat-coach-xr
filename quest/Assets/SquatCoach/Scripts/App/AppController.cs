@@ -185,7 +185,12 @@ namespace SquatCoach.App
             _poseShadow.ImageH = frame.ImageH;
             _hasPose = true;
 
-            foreach (var key in _lastActiveIssues) voiceCoach?.SpeakIssue(key);
+            // Speak at most one in-rep cue per frame, picked by priority.
+            // Each cue has its own cooldown, and VoiceCoach also refuses to
+            // start a new cue while another is mid-playback, so this can't
+            // produce overlapping speech.
+            string inRepCue = PickCueFromIssues(_lastActiveIssues);
+            if (inRepCue != null) voiceCoach?.SpeakIssue(inRepCue);
 
             if (result.CompletedRep != null)
             {
@@ -234,18 +239,11 @@ namespace SquatCoach.App
 
         // --- helpers -------------------------------------------------------
 
-        private static readonly string[] _cuePriority =
-        {
-            "lean_forward", "heel_lift", "knees_forward", "depth_shallow", "rushed",
-        };
-
         private static string PickCueForRep(RepRecord rep)
-        {
-            if (rep.Issues == null || rep.Issues.Count == 0) return null;
-            foreach (var key in _cuePriority)
-                if (rep.Issues.Contains(key)) return key;
-            return rep.Issues[0];
-        }
+            => IssueMessages.PickTopPriority(rep.Issues);
+
+        private static string PickCueFromIssues(IList<string> issues)
+            => IssueMessages.PickTopPriority(issues);
 
         private static bool IsGoodSet(SetRecord s)
         {

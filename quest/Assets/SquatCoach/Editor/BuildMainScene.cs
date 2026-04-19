@@ -12,6 +12,7 @@ using SquatCoach.App;
 using SquatCoach.Coaching;
 using SquatCoach.Networking;
 using SquatCoach.UI;
+// XrHeadPoseDriver lives in SquatCoach.App, already imported above.
 
 namespace SquatCoach.EditorTools
 {
@@ -38,20 +39,33 @@ namespace SquatCoach.EditorTools
             {
                 return;
             }
+            BuildSilent();
+        }
 
+        /// <summary>Headless variant used from -executeMethod in batch mode.</summary>
+        public static void BuildSilent()
+        {
             EnsureDirectory(Path.GetDirectoryName(ScenePath));
             var scene = EditorSceneManager.NewScene(
                 NewSceneSetup.EmptyScene, NewSceneMode.Single);
 
             // --- Camera + lighting + EventSystem ------------------------------
+            // Opaque dark background: passthrough caused the OS to pause
+            // our layer on startup, so we stay fully immersed in VR and
+            // just render the HUD in front of a neutral dark canvas.
             var camGO = new GameObject("Main Camera");
             var cam = camGO.AddComponent<Camera>();
             cam.tag = "MainCamera";
             cam.clearFlags = CameraClearFlags.SolidColor;
-            cam.backgroundColor = new Color(0.03f, 0.03f, 0.04f, 1f);
+            cam.backgroundColor = new Color(0.02f, 0.03f, 0.05f, 1f);
             cam.nearClipPlane = 0.05f;
             camGO.transform.position = new Vector3(0, 1.6f, 0);
             camGO.AddComponent<AudioListener>();
+            // Drive the camera transform from the headset pose every frame.
+            // Without this the GameObject stays planted at (0, 1.6, 0) facing
+            // +Z while the eye render matrices use the real head pose, which
+            // is exactly why our head-locked HUD ended up "behind" the user.
+            camGO.AddComponent<XrHeadPoseDriver>();
 
             var lightGO = new GameObject("Directional Light");
             var light = lightGO.AddComponent<Light>();
@@ -76,8 +90,17 @@ namespace SquatCoach.EditorTools
 
             var app = appGO.AddComponent<AppController>();
 
-            // --- HUD canvas (world space, floating in front of the user) ------
+            // --- HUD canvas (world space, parented directly to the camera so
+            //     it is head-locked and ALWAYS visible) ----------------------
+            // We previously relied on a HudFollower that read Camera.transform
+            // each frame, but Unity doesn't update the GameObject transform of
+            // an XR camera unless a TrackedPoseDriver is attached. The result
+            // was a HUD parked at a static world position; if the headset
+            // happened to start pointing somewhere else the user just saw the
+            // dark camera clear color. Parenting under the camera bypasses
+            // that completely — the HUD now lives in head space.
             var hudCanvasGO = new GameObject("HUDCanvas");
+            hudCanvasGO.transform.SetParent(camGO.transform, worldPositionStays: false);
             var hudCanvas = hudCanvasGO.AddComponent<Canvas>();
             hudCanvas.renderMode = RenderMode.WorldSpace;
             hudCanvas.sortingOrder = 0;
@@ -86,17 +109,31 @@ namespace SquatCoach.EditorTools
             var hudRT = hudCanvasGO.GetComponent<RectTransform>();
             hudRT.sizeDelta = new Vector2(1200, 700);
             hudRT.localScale = Vector3.one * 0.0015f;
-            hudRT.position = new Vector3(0, 1.5f, 2.0f);
-            hudRT.rotation = Quaternion.identity;
+            hudRT.anchorMin = hudRT.anchorMax = new Vector2(0.5f, 0.5f);
+            hudRT.pivot = new Vector2(0.5f, 0.5f);
+            // 1.6m in front of the eyes, a hair below eye line so it doesn't
+            // collide with the focus point when looking forward.
+            hudRT.anchoredPosition3D = new Vector3(0f, -0.05f, 1.6f);
+            hudCanvasGO.transform.localRotation = Quaternion.identity;
 
-            // Root panel: single translucent window
+            // Root panel: a frosted-glass window pane. Translucent enough to
+            // keep some of the passthrough room visible (so the user doesn't
+            // feel boxed in), but opaque enough to keep the text readable on
+            // any background.
             var hudPanelGO = CreateChildRect(hudCanvasGO.transform, "HudPanel",
                 anchorMin: Vector2.zero, anchorMax: Vector2.one,
                 offsetMin: Vector2.zero, offsetMax: Vector2.zero);
             var hudBg = hudPanelGO.AddComponent<Image>();
-            hudBg.color = new Color(0.05f, 0.06f, 0.08f, 0.35f);
+            hudBg.color = new Color(0.06f, 0.08f, 0.12f, 0.92f);
             hudBg.raycastTarget = false;
             var hudPanel = hudPanelGO.AddComponent<HudPanel>();
+
+            // Thin bright border strips along each edge give the pane a hard
+            // visual boundary so it reads as a separate window over the room.
+            AddBorder(hudPanelGO.transform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0, -2), new Vector2(0, 0)); // top
+            AddBorder(hudPanelGO.transform, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0,  0), new Vector2(0, 2)); // bottom
+            AddBorder(hudPanelGO.transform, new Vector2(0f, 0f), new Vector2(0f, 1f), new Vector2(0,  0), new Vector2(2, 0)); // left
+            AddBorder(hudPanelGO.transform, new Vector2(1f, 0f), new Vector2(1f, 1f), new Vector2(-2, 0), new Vector2(0, 0)); // right
 
             // Left column (counters + status + cue)
             var leftGO = CreateChildRect(hudPanelGO.transform, "LeftColumn",
@@ -134,8 +171,9 @@ namespace SquatCoach.EditorTools
             mannequinGraphic.color = Color.white;
             var mannequinRenderer = mannequinGO.AddComponent<MannequinRenderer>();
 
-            // --- IP entry canvas (world space, in front of the HUD) ----------
+            // --- IP entry canvas (head-locked just like the HUD) --------------
             var ipCanvasGO = new GameObject("IPEntryCanvas");
+            ipCanvasGO.transform.SetParent(camGO.transform, worldPositionStays: false);
             var ipCanvas = ipCanvasGO.AddComponent<Canvas>();
             ipCanvas.renderMode = RenderMode.WorldSpace;
             ipCanvas.sortingOrder = 1;
@@ -144,7 +182,10 @@ namespace SquatCoach.EditorTools
             var ipRT = ipCanvasGO.GetComponent<RectTransform>();
             ipRT.sizeDelta = new Vector2(800, 500);
             ipRT.localScale = Vector3.one * 0.0015f;
-            ipRT.position = new Vector3(0, 1.5f, 1.5f);
+            ipRT.anchorMin = ipRT.anchorMax = new Vector2(0.5f, 0.5f);
+            ipRT.pivot = new Vector2(0.5f, 0.5f);
+            ipRT.anchoredPosition3D = new Vector3(0f, -0.05f, 1.2f);
+            ipCanvasGO.transform.localRotation = Quaternion.identity;
             var ipBg = ipCanvasGO.AddComponent<Image>();
             ipBg.color = new Color(0.03f, 0.05f, 0.10f, 0.9f);
 
@@ -202,11 +243,18 @@ namespace SquatCoach.EditorTools
             // --- Save --------------------------------------------------------
             EditorSceneManager.SaveScene(scene, ScenePath);
             AddSceneToBuildSettings(ScenePath);
-            EditorUtility.DisplayDialog(
-                "Build Main Scene",
-                "Main scene created at " + ScenePath +
-                "\nAdded to Build Settings.",
-                "OK");
+            if (!UnityEditorInternal.InternalEditorUtility.inBatchMode)
+            {
+                EditorUtility.DisplayDialog(
+                    "Build Main Scene",
+                    "Main scene created at " + ScenePath +
+                    "\nAdded to Build Settings.",
+                    "OK");
+            }
+            else
+            {
+                Debug.Log("[BuildMainScene] Saved scene to " + ScenePath);
+            }
         }
 
         // -----------------------------------------------------------------
@@ -295,6 +343,22 @@ namespace SquatCoach.EditorTools
             input.textComponent = txt;
             input.placeholder = ph;
             return input;
+        }
+
+        private static void AddBorder(Transform parent,
+            Vector2 anchorMin, Vector2 anchorMax,
+            Vector2 offsetMin, Vector2 offsetMax)
+        {
+            var go = new GameObject("Border");
+            go.transform.SetParent(parent, false);
+            var rt = go.AddComponent<RectTransform>();
+            rt.anchorMin = anchorMin;
+            rt.anchorMax = anchorMax;
+            rt.offsetMin = offsetMin;
+            rt.offsetMax = offsetMax;
+            var img = go.AddComponent<Image>();
+            img.color = new Color(0.80f, 0.85f, 0.95f, 0.35f);
+            img.raycastTarget = false;
         }
 
         private static void StretchToParent(RectTransform rt, Vector4 padding = default)
