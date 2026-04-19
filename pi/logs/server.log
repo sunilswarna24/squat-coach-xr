@@ -1,0 +1,39 @@
+02:52:05 INFO websockets.server: server listening on 0.0.0.0:8765
+02:52:05 INFO pi.ws: WebSocket server listening on ws://0.0.0.0:8765
+02:52:12 INFO pi.main: server reachable at ws://127.0.0.1:8765
+02:52:12 INFO pi.main: server reachable at ws://10.0.0.239:8765
+OpenCV: not authorized to capture video (status 0), requesting...
+OpenCV: can not spin main run loop from other thread, set OPENCV_AVFOUNDATION_SKIP_AUTH=1 to disable authorization request and perform it in your application.
+OpenCV: camera failed to properly initialize!
+[ WARN:0@6.705] global cap_ffmpeg_impl.hpp:1217 open VIDEOIO/FFMPEG: Failed list devices for backend avfoundation
+02:52:12 ERROR pi.main: camera open failed: Could not open camera index 0. Tried backends: CAP_ANY.
+02:52:12 INFO pi.main: stopping capture...
+Traceback (most recent call last):
+  File "/Users/ankitroshantalluri/Desktop/pose/squat-coach-xr/pi/src/main.py", line 236, in run
+    while not shutdown.is_set() and capture.is_alive():
+  File "/opt/homebrew/Cellar/python@3.10/3.10.20/Frameworks/Python.framework/Versions/3.10/lib/python3.10/threading.py", line 1180, in is_alive
+    self._wait_for_tstate_lock(False)
+  File "/opt/homebrew/Cellar/python@3.10/3.10.20/Frameworks/Python.framework/Versions/3.10/lib/python3.10/threading.py", line 1118, in _wait_for_tstate_lock
+    self._stop()
+TypeError: 'Event' object is not callable
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/opt/homebrew/Cellar/python@3.10/3.10.20/Frameworks/Python.framework/Versions/3.10/lib/python3.10/runpy.py", line 196, in _run_module_as_main
+    return _run_code(code, main_globals, None,
+  File "/opt/homebrew/Cellar/python@3.10/3.10.20/Frameworks/Python.framework/Versions/3.10/lib/python3.10/runpy.py", line 86, in _run_code
+    exec(code, run_globals)
+  File "/Users/ankitroshantalluri/Desktop/pose/squat-coach-xr/pi/src/main.py", line 257, in <module>
+    sys.exit(run(parse_args()))
+  File "/Users/ankitroshantalluri/Desktop/pose/squat-coach-xr/pi/src/main.py", line 241, in run
+    capture.join(timeout=3.0)
+  File "/opt/homebrew/Cellar/python@3.10/3.10.20/Frameworks/Python.framework/Versions/3.10/lib/python3.10/threading.py", line 1100, in join
+    self._wait_for_tstate_lock(timeout=max(timeout, 0))
+  File "/opt/homebrew/Cellar/python@3.10/3.10.20/Frameworks/Python.framework/Versions/3.10/lib/python3.10/threading.py", line 1118, in _wait_for_tstate_lock
+    self._stop()
+TypeError: 'Event' object is not callable
+02:52:12 ERROR asyncio: Task was destroyed but it is pending!
+task: <Task pending name='Task-1' coro=<PoseBroadcaster.serve() running at /Users/ankitroshantalluri/Desktop/pose/squat-coach-xr/pi/src/ws_server.py:70> wait_for=<Future pending cb=[Task.task_wakeup()]> cb=[_chain_future.<locals>._call_set_state() at /opt/homebrew/Cellar/python@3.10/3.10.20/Frameworks/Python.framework/Versions/3.10/lib/python3.10/asyncio/futures.py:392]>
+Exception ignored in: <coroutine object PoseBroadcaster.serve at 0x113aa55b0>
+RuntimeError: coroutine ignored GeneratorExit

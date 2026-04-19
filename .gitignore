@@ -23,6 +23,13 @@ quest/*.booproj
 quest/*.apk
 quest/*.aab
 quest/Assets/**/*.meta.bak
+# Local package tarballs pulled in via file: references in Packages/manifest.json.
+# These can exceed GitHub's 100 MB file size limit (e.g. Meta XR Core SDK),
+# so each developer downloads them into quest/Packages/tarballs/ locally.
+quest/Packages/tarballs/
+quest/build/
+quest/build.log
+quest/.utmp/
 
 # ---- OS / editors ----
 .DS_Store

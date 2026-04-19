@@ -34,11 +34,11 @@ namespace SquatCoach.Analysis
         /// <summary>Running median over a fixed-capacity circular buffer.</summary>
         public static float Median(ReadOnlySpan<float> values)
         {
-            if (values.Length == 0) return 0f;
-            Span<float> copy = stackalloc float[values.Length];
-            values.CopyTo(copy);
-            copy.Sort();
-            int n = copy.Length;
+            int n = values.Length;
+            if (n == 0) return 0f;
+            var copy = new float[n];
+            for (int i = 0; i < n; i++) copy[i] = values[i];
+            Array.Sort(copy);
             return (n % 2 == 1) ? copy[n / 2] : 0.5f * (copy[n / 2 - 1] + copy[n / 2]);
         }
     }

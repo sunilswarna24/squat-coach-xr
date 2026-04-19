@@ -222,8 +222,22 @@ namespace SquatCoach.Analysis
 
             float depthRatio = (hip.y - knee.y) / thighLen;
 
-            float forwardSign = (toe.x - heel.x) >= 0f ? 1f : -1f;
-            float kneePast = ((knee.x - toe.x) * forwardSign) / shinLen;
+            // If the foot is badly foreshortened in the image (camera is
+            // pointed at the user from too sharp an angle, or the user is
+            // almost facing the camera), `forwardSign` becomes unreliable
+            // and `kneePast` starts reporting huge values for normal squats.
+            // Fall back to NaN so the downstream form check skips this frame.
+            float kneePast;
+            float footProjRatio = footLen / shinLen;
+            if (footProjRatio < 0.18f)
+            {
+                kneePast = float.NaN;
+            }
+            else
+            {
+                float forwardSign = (toe.x - heel.x) >= 0f ? 1f : -1f;
+                kneePast = ((knee.x - toe.x) * forwardSign) / shinLen;
+            }
 
             float heelLift = float.NaN;
             if (_heelYBaseline.HasValue && _footLenBaseline.HasValue && _footLenBaseline.Value > 0f)

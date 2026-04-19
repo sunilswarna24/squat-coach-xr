@@ -3,6 +3,7 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 using SquatCoach.Analysis;
+using SquatCoach.Coaching;
 
 namespace SquatCoach.UI
 {
@@ -52,6 +53,14 @@ namespace SquatCoach.UI
         public Color okColor = new Color(0.60f, 0.85f, 0.55f);
         public Color warnColor = new Color(1.00f, 0.80f, 0.20f);
         public Color badColor = new Color(0.95f, 0.30f, 0.25f);
+
+        [Header("Cue caption")]
+        [Tooltip("Minimum time (s) a cue stays visible before it can be replaced. Keeps the text in sync with voice and prevents flicker when multiple issues fire on the same frame.")]
+        [Range(0f, 2f)] public float cueMinHoldS = 0.6f;
+
+        // --- sticky cue state ---
+        private string _displayedCueKey;
+        private float _displayedCueSetAt = float.NegativeInfinity;
 
         private void Awake()
         {
@@ -107,10 +116,12 @@ namespace SquatCoach.UI
 
             if (cueText != null)
             {
-                if (activeIssues != null && activeIssues.Count > 0)
+                string topKey = IssueMessages.PickTopPriority(activeIssues);
+                string nextKey = ResolveStickyCue(topKey);
+                if (!string.IsNullOrEmpty(nextKey))
                 {
                     cueText.color = badColor;
-                    cueText.text = HumanizeCue(activeIssues[0]);
+                    cueText.text = HumanizeCue(nextKey);
                 }
                 else
                 {
@@ -127,6 +138,48 @@ namespace SquatCoach.UI
                 else
                     mannequin.ClearPose();
             }
+        }
+
+        /// <summary>
+        /// Keep the caption visible for at least <see cref="cueMinHoldS"/>
+        /// once we've shown it — that's what makes the text line up with
+        /// the voice clip and prevents "Chest up → Hips back → Heels down"
+        /// strobing on a single frame. Returns the key that should actually
+        /// be rendered this frame.
+        /// </summary>
+        private string ResolveStickyCue(string topKey)
+        {
+            float now = Time.unscaledTime;
+
+            if (!string.IsNullOrEmpty(topKey))
+            {
+                // Same cue still relevant → extend its display.
+                if (topKey == _displayedCueKey)
+                {
+                    _displayedCueSetAt = now;
+                    return _displayedCueKey;
+                }
+                // Different cue requested. Only allow a swap once the current
+                // caption has been on screen long enough for the user to read.
+                bool canReplace = string.IsNullOrEmpty(_displayedCueKey) ||
+                                  (now - _displayedCueSetAt) >= cueMinHoldS;
+                if (canReplace)
+                {
+                    _displayedCueKey = topKey;
+                    _displayedCueSetAt = now;
+                }
+                return _displayedCueKey;
+            }
+
+            // No active issue. Keep the last caption visible for its hold
+            // window, then clear it.
+            if (!string.IsNullOrEmpty(_displayedCueKey) &&
+                (now - _displayedCueSetAt) < cueMinHoldS)
+            {
+                return _displayedCueKey;
+            }
+            _displayedCueKey = null;
+            return null;
         }
 
         // Map internal issue keys to short human strings. Kept separate from
